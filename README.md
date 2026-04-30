@@ -59,7 +59,16 @@ You might half-remember an identifier. A symbol might have been renamed. Generat
 
 ## Quick Start
 
-Install from source:
+Install from crates.io:
+
+```powershell
+cargo install rocketgrep
+rocketgrep --version
+```
+
+That is the recommended install path for most users.
+
+Build from source:
 
 ```powershell
 git clone https://github.com/priceds/rocketgrep.git
