@@ -5,25 +5,89 @@
 <h1 align="center">rocketgrep</h1>
 
 <p align="center">
-  Fast exact grep today, practical edit-distance grep next to it.
+  A Rust search tool for exact grep and practical fuzzy code search.
 </p>
 
-`rocketgrep` is a Rust CLI search tool inspired by `ripgrep`, with a focus on developer workflows where approximate/fuzzy code search is useful: misspelled identifiers, renamed symbols, noisy generated code, and large trees where exact search is not quite enough.
+`rocketgrep` is a command-line search tool inspired by `ripgrep`. It searches code and text quickly, and it also supports approximate matching with Levenshtein edit distance through `-k/--edit-distance`.
 
-It currently provides:
+That means you can search even when the text is slightly wrong:
 
-- Fast exact regex and fixed-string search.
-- Native Levenshtein edit-distance search with `-k/--edit-distance`.
-- Parallel directory walking with `.gitignore` support.
-- Memory-mapped file scanning with a safe read fallback.
-- Context lines, colors, count mode, files-with-matches mode, and JSON output.
-- Optional sparse trigram indexing for repeated searches.
+```powershell
+rocketgrep -k 1 "neddle" .
+```
 
-## Honest Status
+This can find `needle`, because it is one edit away from `neddle`.
 
-This is an early research-flavored tool, not a drop-in replacement for every `ripgrep` workflow yet.
+## Why This Exists
 
-The exact-search path is already competitive in local warm-cache tests. The fuzzy path is intentionally practical: it uses seed filtering plus thresholded Levenshtein verification, with DP fallback for short patterns. The repository also contains PILLAR-style primitives and a small seaweed monoid scaffold for future work inspired by Charalampopoulos, Kociumaka, and Wellnitz's "Faster Pattern Matching under Edit Distance", but it does not claim to fully implement that paper's Dynamic Puzzle Matching construction yet.
+Traditional grep tools are excellent when you know the exact text or regex. Real code search is often messier:
+
+- You half-remember an identifier.
+- A symbol was renamed.
+- Generated code has noisy variants.
+- You typo a function name.
+- You want "close enough" matches without opening a full IDE index.
+
+`rocketgrep` explores that space: keep exact search fast, then add native fuzzy search that works directly in the terminal.
+
+## Research Credit
+
+This project is inspired by the paper:
+
+**"Faster Pattern Matching under Edit Distance"** by Panagiotis Charalampopoulos, Tomasz Kociumaka, and Philip Wellnitz.
+
+Links:
+
+- arXiv abstract: https://arxiv.org/abs/2204.03087
+- PDF: https://arxiv.org/pdf/2204.03087.pdf
+
+The paper develops a faster theoretical algorithm for pattern matching under edit distance using the PILLAR model, periodicity, Dynamic Puzzle Matching, and the seaweed monoid.
+
+Important honesty note: `rocketgrep` does not yet claim to fully implement the entire paper. The current release uses a practical fuzzy-search engine designed for real CLI use, while also including early PILLAR-style primitives and seaweed-monoid scaffolding for future research-backed work.
+
+## What It Can Do Today
+
+- Search with regex patterns.
+- Search fixed strings with `-F`.
+- Search approximately with `-k`, for example `-k 1` or `-k 2`.
+- Respect `.gitignore` and common ignore rules.
+- Search files in parallel.
+- Use memory mapping for fast file reads.
+- Show context lines with `-A`, `-B`, and `-C`.
+- Print JSON with `--json`.
+- Show fuzzy scores with `--scores`.
+- Rank fuzzy results with `--sort score`.
+- Build a sparse trigram index for repeated searches.
+
+## How It Works
+
+At a high level, `rocketgrep` has four pieces.
+
+First, it walks the directory tree. It uses the Rust `ignore` crate, so it understands `.gitignore`, hidden files, file types, globs, and common developer-project rules.
+
+Second, it reads files efficiently. It uses memory-mapped IO through `memmap2` when possible and falls back to normal file reads when mapping fails.
+
+Third, it chooses a matcher:
+
+- Regex search uses Rust's byte-oriented regex engine.
+- Exact fixed-string search uses fast byte substring search.
+- Approximate search uses a practical edit-distance pipeline.
+
+Fourth, it renders results as human-readable colored output or newline-delimited JSON.
+
+## How Fuzzy Search Works
+
+For approximate search, `rocketgrep` currently uses a pragmatic algorithm:
+
+1. Split the pattern into several smaller exact pieces.
+2. Search for those pieces quickly.
+3. Use the matching pieces to guess candidate locations.
+4. Verify each candidate with bounded Levenshtein distance.
+5. Keep the best non-overlapping matches and attach a score.
+
+This works well for many developer searches because identifiers and code tokens usually contain selective substrings.
+
+For very short patterns or weak filters, `rocketgrep` can fall back to a direct dynamic-programming check. That is slower, but safer.
 
 ## Install From Source
 
@@ -32,6 +96,12 @@ git clone https://github.com/priceds/rocketgrep.git
 cd rocketgrep
 cargo build --release
 target/release/rocketgrep --version
+```
+
+On Windows, the binary will be:
+
+```powershell
+target\release\rocketgrep.exe
 ```
 
 ## Quick Start
@@ -81,7 +151,15 @@ cargo run --bin rocketgrep -- -F --index .rocketgrep-index.json "needle" .
 cargo run --bin rocketgrep -- -k 1 --index .rocketgrep-index.json "needle" .
 ```
 
-The index is a safe prefilter only. Search results are still verified by the matcher, so broad index hits cannot create false matches. Files missing from the index or changed since indexing are scanned normally. If a query is too short or too fuzzy for a safe trigram prefilter, `rocketgrep` scans normally.
+The index is only a prefilter. Every result is still checked by the real matcher, so broad index hits cannot create false matches. Files missing from the index or changed since indexing are scanned normally.
+
+## Current Limitations
+
+- The full theoretical algorithm from the paper is not implemented yet.
+- Fuzzy search is literal-pattern based, not fuzzy regex.
+- Very short fuzzy patterns can be expensive.
+- Highly repetitive text can create many candidate matches.
+- The CLI is not yet fully compatible with every `ripgrep` flag.
 
 ## What We Tested
 
@@ -97,7 +175,7 @@ release build passed
 
 The tests cover exact literal search, regex search, approximate one-error search, ASCII-insensitive fuzzy search, context output, JSON score metadata, `.gitignore` handling, binary-file skipping, sparse index filtering, stale-index safety, PILLAR primitives, and seaweed monoid laws.
 
-Local warm-cache benchmark smoke tests on Windows showed `rocketgrep` beating `ripgrep` for simple exact searches on this repository and on a synthetic 2000-file corpus. That is encouraging, but not a universal performance claim. Larger real-world benchmarks are still needed across cold cache, giant monorepos, complex regexes, binary-heavy trees, huge output volumes, and adversarial fuzzy cases.
+Local warm-cache benchmark smoke tests on Windows showed `rocketgrep` beating `ripgrep` for simple exact searches on this repository and on a synthetic 2000-file corpus. That is encouraging, but it is not a universal performance claim. Larger real-world benchmarks are still needed.
 
 ## Benchmarking
 
@@ -116,15 +194,15 @@ Useful comparisons:
 
 ## Contributing
 
-Contributions are welcome, especially if they come with correctness tests and realistic benchmarks.
+Contributions are welcome.
 
-Good first areas:
+Especially useful contributions:
 
-- Add benchmark corpora and reproducible performance reports.
-- Improve fuzzy matching on short patterns and repetitive text.
-- Add more `ripgrep`-compatible CLI flags.
-- Improve output parity and JSON schema documentation.
-- Build a more faithful CKW/PILLAR/Dynamic Puzzle Matching backend behind a separate algorithm flag.
-- Test on Linux and macOS, especially large repositories.
+- Real benchmark reports from large repositories.
+- More `ripgrep`-compatible CLI flags.
+- Better fuzzy matching for short or repetitive patterns.
+- Linux and macOS testing.
+- JSON schema documentation.
+- A faithful CKW-inspired backend behind a separate algorithm flag.
 
-For algorithmic changes, please include differential tests against a simple dynamic-programming verifier. False negatives are the one thing a search tool must not casually risk.
+For algorithmic changes, please include tests against a simple dynamic-programming verifier. Search tools must be especially careful about false negatives.
