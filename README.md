@@ -1,124 +1,97 @@
 <p align="center">
-  <img src="docs/rocketgrep.png" alt="rocketgrep logo" width="220">
+  <img src="docs/rocketgrep.png" alt="rocketgrep logo" width="380">
 </p>
 
 <h1 align="center">rocketgrep</h1>
 
 <p align="center">
-  A Rust search tool for exact grep and practical fuzzy code search.
+  <strong>Exact grep when you know the text. Fuzzy grep when you almost do.</strong>
 </p>
 
-`rocketgrep` is a command-line search tool inspired by `ripgrep`. It searches code and text quickly, and it also supports approximate matching with Levenshtein edit distance through `-k/--edit-distance`.
+<p align="center">
+  <a href="https://github.com/priceds/rocketgrep/actions/workflows/release.yml"><img alt="release" src="https://img.shields.io/github/actions/workflow/status/priceds/rocketgrep/release.yml?branch=main&label=release&style=for-the-badge&labelColor=1f2937"></a>
+  <a href="https://github.com/priceds/rocketgrep/releases"><img alt="version" src="https://img.shields.io/github/v/release/priceds/rocketgrep?style=for-the-badge&label=release&labelColor=1f2937&color=ff6b35"></a>
+  <a href="https://www.rust-lang.org/"><img alt="rust" src="https://img.shields.io/badge/Rust-2021-f74c00?style=for-the-badge&labelColor=1f2937"></a>
+  <a href="https://arxiv.org/abs/2204.03087"><img alt="paper" src="https://img.shields.io/badge/arXiv-2204.03087-b31b1b?style=for-the-badge&labelColor=1f2937"></a>
+  <a href="https://github.com/priceds/rocketgrep/blob/main/Cargo.toml"><img alt="license" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-2563eb?style=for-the-badge&labelColor=1f2937"></a>
+</p>
 
-That means you can search even when the text is slightly wrong:
+<p align="center">
+  <a href="#why-rocketgrep">Why</a>
+  · <a href="#quick-start">Quick Start</a>
+  · <a href="#highlights">Highlights</a>
+  · <a href="#how-fuzzy-search-works">How Fuzzy Search Works</a>
+  · <a href="#indexing">Indexing</a>
+  · <a href="#testing">Testing</a>
+  · <a href="#contributing">Contributing</a>
+</p>
+
+---
+
+`rocketgrep` is a Rust command-line search tool inspired by `ripgrep`. It searches code and text quickly, and it also supports approximate matching with Levenshtein edit distance through `-k/--edit-distance`.
+
+If you search for the wrong spelling:
 
 ```powershell
 rocketgrep -k 1 "neddle" .
 ```
 
-This can find `needle`, because it is one edit away from `neddle`.
+`rocketgrep` can still find `needle`, because it is one edit away.
 
-## Why This Exists
+## Why rocketgrep
 
-Traditional grep tools are excellent when you know the exact text or regex. Real code search is often messier:
+Classic grep tools are excellent when you know the exact text or regex. Real code search is often messier.
 
-- You half-remember an identifier.
-- A symbol was renamed.
-- Generated code has noisy variants.
-- You typo a function name.
-- You want "close enough" matches without opening a full IDE index.
+You might half-remember an identifier. A symbol might have been renamed. Generated code might contain noisy variants. Or you might simply typo a function name while moving fast.
 
 `rocketgrep` explores that space: keep exact search fast, then add native fuzzy search that works directly in the terminal.
 
-## Research Credit
+## Highlights
 
-This project is inspired by the paper:
+- **Fast exact search** — regex search by default and fixed-string search with `-F`.
+- **Native fuzzy search** — use `-k 1`, `-k 2`, or another edit-distance threshold.
+- **Developer-project aware** — respects `.gitignore`, hidden-file rules, globs, and file types.
+- **Parallel scanning** — walks and searches files using Rayon-powered parallelism.
+- **Memory-mapped IO** — uses `memmap2` when possible with a normal-read fallback.
+- **Useful output modes** — context lines, colors, counts, files-with-matches, scores, ranking, and JSON.
+- **Sparse indexing** — optional trigram index for repeated exact or fuzzy searches.
+- **Research path included** — PILLAR-style primitives and seaweed-monoid scaffolding are present for future algorithm work.
 
-**"Faster Pattern Matching under Edit Distance"** by Panagiotis Charalampopoulos, Tomasz Kociumaka, and Philip Wellnitz.
+## Quick Start
 
-Links:
-
-- arXiv abstract: https://arxiv.org/abs/2204.03087
-- PDF: https://arxiv.org/pdf/2204.03087.pdf
-
-The paper develops a faster theoretical algorithm for pattern matching under edit distance using the PILLAR model, periodicity, Dynamic Puzzle Matching, and the seaweed monoid.
-
-Important honesty note: `rocketgrep` does not yet claim to fully implement the entire paper. The current release uses a practical fuzzy-search engine designed for real CLI use, while also including early PILLAR-style primitives and seaweed-monoid scaffolding for future research-backed work.
-
-## What It Can Do Today
-
-- Search with regex patterns.
-- Search fixed strings with `-F`.
-- Search approximately with `-k`, for example `-k 1` or `-k 2`.
-- Respect `.gitignore` and common ignore rules.
-- Search files in parallel.
-- Use memory mapping for fast file reads.
-- Show context lines with `-A`, `-B`, and `-C`.
-- Print JSON with `--json`.
-- Show fuzzy scores with `--scores`.
-- Rank fuzzy results with `--sort score`.
-- Build a sparse trigram index for repeated searches.
-
-## How It Works
-
-At a high level, `rocketgrep` has four pieces.
-
-First, it walks the directory tree. It uses the Rust `ignore` crate, so it understands `.gitignore`, hidden files, file types, globs, and common developer-project rules.
-
-Second, it reads files efficiently. It uses memory-mapped IO through `memmap2` when possible and falls back to normal file reads when mapping fails.
-
-Third, it chooses a matcher:
-
-- Regex search uses Rust's byte-oriented regex engine.
-- Exact fixed-string search uses fast byte substring search.
-- Approximate search uses a practical edit-distance pipeline.
-
-Fourth, it renders results as human-readable colored output or newline-delimited JSON.
-
-## How Fuzzy Search Works
-
-For approximate search, `rocketgrep` currently uses a pragmatic algorithm:
-
-1. Split the pattern into several smaller exact pieces.
-2. Search for those pieces quickly.
-3. Use the matching pieces to guess candidate locations.
-4. Verify each candidate with bounded Levenshtein distance.
-5. Keep the best non-overlapping matches and attach a score.
-
-This works well for many developer searches because identifiers and code tokens usually contain selective substrings.
-
-For very short patterns or weak filters, `rocketgrep` can fall back to a direct dynamic-programming check. That is slower, but safer.
-
-## Install From Source
+Install from source:
 
 ```powershell
 git clone https://github.com/priceds/rocketgrep.git
 cd rocketgrep
 cargo build --release
+```
+
+Run the binary:
+
+```powershell
 target/release/rocketgrep --version
 ```
 
-On Windows, the binary will be:
+On Windows:
 
 ```powershell
-target\release\rocketgrep.exe
+target\release\rocketgrep.exe --version
 ```
 
-## Quick Start
-
-Regex search:
+Search with a regex:
 
 ```powershell
 cargo run --bin rocketgrep -- "fn main" src
 ```
 
-Fixed-string search:
+Search for an exact string:
 
 ```powershell
 cargo run --bin rocketgrep -- -F "literal_needle" .
 ```
 
-Fuzzy search with edit distance 1:
+Search with one allowed edit:
 
 ```powershell
 cargo run --bin rocketgrep -- -k 1 "neddle" .
@@ -135,6 +108,45 @@ Emit newline-delimited JSON:
 ```powershell
 cargo run --bin rocketgrep -- --json -k 1 "needle" src
 ```
+
+## How It Works
+
+At a high level, `rocketgrep` has four moving parts.
+
+**1. Walk the project.** It uses the Rust `ignore` crate, so it understands `.gitignore`, hidden files, file types, globs, and common developer-project rules.
+
+**2. Read files efficiently.** It uses memory-mapped IO through `memmap2` when possible and falls back to normal file reads when mapping fails.
+
+**3. Choose a matcher.** Regex search uses Rust's byte-oriented regex engine. Fixed-string search uses fast byte substring search. Fuzzy search uses a practical edit-distance pipeline.
+
+**4. Render results.** Output can be human-readable, colored, scored, ranked, counted, or emitted as newline-delimited JSON.
+
+## How Fuzzy Search Works
+
+For approximate search, `rocketgrep` currently uses a pragmatic algorithm:
+
+1. Split the pattern into smaller exact pieces.
+2. Search quickly for those pieces.
+3. Use those hits to guess candidate match locations.
+4. Verify each candidate with bounded Levenshtein distance.
+5. Keep the best non-overlapping matches and attach a score.
+
+This works well for many developer searches because identifiers and code tokens usually contain selective substrings.
+
+For very short patterns or weak filters, `rocketgrep` can fall back to a direct dynamic-programming check. That is slower, but safer.
+
+## Research Credit
+
+`rocketgrep` is inspired by:
+
+**"Faster Pattern Matching under Edit Distance"** by Panagiotis Charalampopoulos, Tomasz Kociumaka, and Philip Wellnitz.
+
+- arXiv abstract: https://arxiv.org/abs/2204.03087
+- PDF: https://arxiv.org/pdf/2204.03087.pdf
+
+The paper develops a faster theoretical algorithm for pattern matching under edit distance using the PILLAR model, periodicity, Dynamic Puzzle Matching, and the seaweed monoid.
+
+Important honesty note: `rocketgrep` does **not** yet claim to fully implement the entire paper. The current release uses a practical fuzzy-search engine designed for real CLI use, while also including early PILLAR-style primitives and seaweed-monoid scaffolding for future research-backed work.
 
 ## Indexing
 
@@ -161,7 +173,7 @@ The index is only a prefilter. Every result is still checked by the real matcher
 - Highly repetitive text can create many candidate matches.
 - The CLI is not yet fully compatible with every `ripgrep` flag.
 
-## What We Tested
+## Testing
 
 Current verification:
 
@@ -175,7 +187,38 @@ release build passed
 
 The tests cover exact literal search, regex search, approximate one-error search, ASCII-insensitive fuzzy search, context output, JSON score metadata, `.gitignore` handling, binary-file skipping, sparse index filtering, stale-index safety, PILLAR primitives, and seaweed monoid laws.
 
-Local warm-cache benchmark smoke tests on Windows showed `rocketgrep` beating `ripgrep` for simple exact searches on this repository and on a synthetic 2000-file corpus. That is encouraging, but it is not a universal performance claim. Larger real-world benchmarks are still needed.
+## Local Results vs ripgrep
+
+We also ran small warm-cache smoke benchmarks on Windows using `Measure-Command`. These are not a replacement for `hyperfine`, but they are useful early signal.
+
+Environment:
+
+- OS: Windows
+- `ripgrep`: `15.1.0`
+- `rocketgrep`: release build
+- Output redirected to null
+- Cache state: warm local filesystem
+
+Small repo search over `src`, pattern `fn`:
+
+| Command | Average | Minimum | Maximum |
+| --- | ---: | ---: | ---: |
+| `rocketgrep -F fn src` | `15.52ms` | `12.50ms` | `51.05ms` |
+| `rg -F fn src` | `23.33ms` | `21.07ms` | `40.03ms` |
+| `rocketgrep fn src` | `14.03ms` | `12.45ms` | `26.58ms` |
+| `rg fn src` | `23.39ms` | `19.54ms` | `38.78ms` |
+
+Synthetic 2000-file corpus, pattern `needle`:
+
+| Command | Average | Minimum | Maximum |
+| --- | ---: | ---: | ---: |
+| `rocketgrep -F needle corpus` | `54.39ms` | `49.47ms` | `77.21ms` |
+| `rg -F needle corpus` | `103.18ms` | `96.59ms` | `109.34ms` |
+| `rocketgrep needle corpus` | `54.77ms` | `49.75ms` | `66.67ms` |
+| `rg needle corpus` | `100.22ms` | `93.72ms` | `109.82ms` |
+| `rocketgrep -k 1 neodle corpus` | `56.21ms` | `51.27ms` | `68.78ms` |
+
+These results are encouraging: `rocketgrep` was faster than `ripgrep` in these simple local exact-search cases, and fuzzy `-k 1` was close to exact-search time on the synthetic corpus. They are **not** a universal performance claim. Larger real-world benchmarks are still needed across cold cache, huge monorepos, complex regexes, binary-heavy trees, massive output, Linux/macOS, and adversarial fuzzy cases.
 
 ## Benchmarking
 
