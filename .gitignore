@@ -1,0 +1,4 @@
+/target/
+**/*.rs.bk
+docs/phase*-architecture.md
+.rocketgrep-index.json
