@@ -5,7 +5,16 @@ edition = "2021"
 rust-version = "1.78"
 description = "A high-performance grep-style CLI with native edit-distance search."
 license = "MIT OR Apache-2.0"
-repository = "https://example.invalid/rocketgrep"
+repository = "https://github.com/priceds/rocketgrep"
+homepage = "https://github.com/priceds/rocketgrep"
+readme = "README.md"
+keywords = ["grep", "search", "fuzzy", "levenshtein", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [
+    ".github/",
+    "PULL_REQUEST.md",
+    "benchmarks/",
+]
 
 [lib]
 name = "rocketgrep"
