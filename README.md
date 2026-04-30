@@ -229,6 +229,52 @@ Synthetic 2000-file corpus, pattern `needle`:
 
 These results are encouraging: `rocketgrep` was faster than `ripgrep` in these simple local exact-search cases, and fuzzy `-k 1` was close to exact-search time on the synthetic corpus. They are **not** a universal performance claim. Larger real-world benchmarks are still needed across cold cache, huge monorepos, complex regexes, binary-heavy trees, massive output, Linux/macOS, and adversarial fuzzy cases.
 
+## Ripgrep-Style Benchmark Reproduction
+
+We also reproduced the shape of the benchmark shown in the `ripgrep` README: search a kernel-like tree for word matches of `[A-Z]+_SUSPEND`. The original benchmark uses a real built Linux kernel tree on Linux hardware. This reproduction uses a generated C/H corpus on Windows, so treat it as local signal, not a replacement for the original benchmark.
+
+Local setup:
+
+- OS: Windows
+- Corpus: generated kernel-like C/H tree under `C:\tmp`
+- Pattern: `[A-Z]+_SUSPEND`
+- Runs: 20 measured runs after warmup
+- Timing tool: PowerShell `Measure-Command`
+- Output: redirected to null
+- Missing tools: `ack` was not installed; `hypergrep` release artifact was Linux-only in this environment
+
+Tool colors:
+
+<p>
+  <span style="background:#ff6b35;color:white;padding:2px 8px;border-radius:999px;">rocketgrep</span>
+  <span style="background:#2563eb;color:white;padding:2px 8px;border-radius:999px;">ripgrep</span>
+  <span style="background:#16a34a;color:white;padding:2px 8px;border-radius:999px;">ugrep</span>
+  <span style="background:#7c3aed;color:white;padding:2px 8px;border-radius:999px;">git grep</span>
+  <span style="background:#64748b;color:white;padding:2px 8px;border-radius:999px;">ag / grep</span>
+</p>
+
+Default ignore-aware search:
+
+| Tool | Command | Lines | Average | Minimum | Maximum |
+| --- | --- | ---: | ---: | ---: | ---: |
+| <span style="color:#16a34a;"><strong>ugrep</strong></span> | `ugrep -r --ignore-files --no-hidden -I -w '[A-Z]+_SUSPEND'` | 536 | `42.01ms` | `39.63ms` | `52.90ms` |
+| <span style="color:#ff6b35;"><strong>rocketgrep</strong></span> | `rocketgrep '\b[A-Z]+_SUSPEND\b'` | 536 | `64.98ms` | `60.92ms` | `71.76ms` |
+| <span style="color:#7c3aed;"><strong>git grep</strong></span> | `git grep -P -n -w '[A-Z]+_SUSPEND'` | 536 | `68.86ms` | `65.92ms` | `75.33ms` |
+| <span style="color:#7c3aed;"><strong>git grep</strong></span> | `git grep -E -n -w '[A-Z]+_SUSPEND'` | 536 | `69.30ms` | `67.05ms` | `72.23ms` |
+| <span style="color:#2563eb;"><strong>ripgrep</strong></span> | `rg -n -w '[A-Z]+_SUSPEND'` | 536 | `84.02ms` | `77.46ms` | `91.53ms` |
+| <span style="color:#64748b;"><strong>ag</strong></span> | `ag --nocolor -w '[A-Z]+_SUSPEND'` | 536 | `137.46ms` | `132.08ms` | `147.58ms` |
+
+Whitelist / no-ignore C-H search:
+
+| Tool | Command | Lines | Average | Minimum | Maximum |
+| --- | --- | ---: | ---: | ---: | ---: |
+| <span style="color:#16a34a;"><strong>ugrep</strong></span> | `ugrep -r -n --include='*.c' --include='*.h' -w '[A-Z]+_SUSPEND'` | 736 | `50.80ms` | `49.16ms` | `56.14ms` |
+| <span style="color:#ff6b35;"><strong>rocketgrep</strong></span> | `rocketgrep --no-ignore --hidden --text -t c '\b[A-Z]+_SUSPEND\b'` | 736 | `83.65ms` | `77.82ms` | `89.31ms` |
+| <span style="color:#2563eb;"><strong>ripgrep</strong></span> | `rg -uuu -tc -n -w '[A-Z]+_SUSPEND'` | 736 | `89.91ms` | `87.14ms` | `93.36ms` |
+| <span style="color:#64748b;"><strong>Git grep.exe</strong></span> | `grep -E -r -n --include='*.c' --include='*.h' -w '[A-Z]+_SUSPEND'` | 736 | `355.91ms` | `345.35ms` | `364.69ms` |
+
+In this local reproduction, `ugrep` was fastest overall. `rocketgrep` was faster than `ripgrep` in both tested modes, and landed close to `git grep` in the default ignore-aware search. The result is promising, but still only one benchmark on one Windows machine.
+
 ## Benchmarking
 
 If you have `hyperfine` and `ripgrep` installed:
